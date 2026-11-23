@@ -1,0 +1,25 @@
+{
+  "name": "@stockguard/worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx --env-file-if-exists=../../.env src/index.ts",
+    "once": "tsx --env-file-if-exists=../../.env src/index.ts --once",
+    "setup": "tsx --env-file-if-exists=../../.env src/setup.ts",
+    "drill": "tsx --env-file-if-exists=../../.env src/drill.ts",
+    "test": "tsx --test src/*.test.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "status": "tsx --env-file-if-exists=../../.env src/status.ts",
+    "alerts:test": "tsx --env-file-if-exists=../../.env src/alerts-test.ts"
+  },
+  "dependencies": {
+    "@stockguard/core": "*",
+    "tsx": "^4.19.2",
+    "viem": "^2.21.54"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "stockguard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "StockGuard \u2014 live NAV-vs-DEX integrity monitor for Coinbase tokenized stocks on Base, with a Reactive Network circuit breaker",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n worker,api,web -c yellow,cyan,magenta \"npm:worker\" \"npm:dev:api\" \"npm:dev:web\"",
+    "view": "concurrently -k -n api,web -c cyan,magenta \"npm:dev:api\" \"npm:dev:web\"",
+    "worker": "npm run start -w @stockguard/worker",
+    "worker:once": "npm run once -w @stockguard/worker",
+    "dev:api": "npm run dev -w @stockguard/api",
+    "dev:web": "npm run dev -w @stockguard/web",
+    "onchain:setup": "npm run setup -w @stockguard/worker",
+    "onchain:status": "npm run status -w @stockguard/worker",
+    "alerts:test": "npm run alerts:test -w @stockguard/worker --",
+    "drill": "npm run drill -w @stockguard/worker --",
+    "test": "npm test -w @stockguard/core && npm test -w @stockguard/worker",
+    "test:contracts": "cd contracts && forge test",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build:web": "npm run build -w @stockguard/web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

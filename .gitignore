@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+.data/
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+_backup_v0.1/
+_archive_v0.2/
+_incoming/
+docs/private/

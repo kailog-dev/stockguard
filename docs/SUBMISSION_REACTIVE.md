@@ -1,0 +1,63 @@
+# Reactive Omni Buildathon — submission draft
+
+Track: **Every Second Counts** (DeFi where reaction time matters; Base Sepolia + Lasna)
+
+## One-liner
+
+StockGuard trips an on-chain circuit breaker for tokenized stocks on Base the moment their DEX price breaks away from NAV —
+the Reactive contract is the only thing between the alert and the breaker. No keeper bot.
+
+## Problem
+
+Coinbase tokenized stocks on Base trade around the clock, but their Chainlink NAV only moves during US market hours.
+Nights, weekends and thin pools let the DEX price drift. Protocols that accept these tokens (lending, vaults, agents)
+need a "stop" signal that arrives in seconds and that they can read on-chain.
+
+## How it works
+
+1. The StockGuard worker compares NAV (Coinbase Tokenized Stocks API) with the deepest Base DEX pool every minute and
+   confirms a ±2% gap on two consecutive checks.
+2. It calls `StockGuardRegistry.reportMarket()` on Base Sepolia, which emits `DepegAlertEmitted`.
+3. `DepegSentinelRSC` on Reactive Lasna is subscribed to that event. `react()` checks chain, emitter, topic and threshold,
+   then requests a callback.
+4. The Reactive callback proxy calls `triggerCircuitBreaker()` on the registry. The registry only accepts callbacks from
+   the proxy **and** only when the proxy-injected sender is our own sentinel, so another RSC cannot trip it.
+5. Any contract reads `isHealthy(asset)` before lending, minting or swapping.
+
+## Why Reactive does real work here
+
+Without Reactive, step 3–4 would be a server we run and you trust. With Reactive, the decision is a public contract and
+the breaker trips even if our worker goes offline after reporting.
+
+## Deployed contracts
+
+| Contract | Chain | Address |
+| --- | --- | --- |
+| StockGuardRegistry | Base Sepolia (84532) | [`0xfBF0411b0F2b99680982e3dC69a83B5EF1fb44c4`](https://sepolia.basescan.org/address/0xfBF0411b0F2b99680982e3dC69a83B5EF1fb44c4) |
+| DepegSentinelRSC | Reactive Lasna (5318007) | [`0xdF847EF0e8454362EaB6F5F4c2b0E235580739DE`](https://lasna.reactscan.net/address/0xdF847EF0e8454362EaB6F5F4c2b0E235580739DE) |
+
+Both contracts are source-verified on Sourcify (Base Sepolia 84532, Lasna 5318007).
+
+## Full loop transaction hashes (fire drill — synthetic price on testnet)
+
+| Step | Tx |
+| --- | --- |
+| Origin: `reportMarket` → `DepegAlertEmitted` (Base Sepolia) | [`0xf91afac1…a3dc7`](https://sepolia.basescan.org/tx/0xf91afac1dcff5b7d80173462cb9ff8228113c45caf05f8d84d3df5cbdf0a3dc7) |
+| Reactive: `react()` → `SentinelFired` + callback request (Lasna) | [`0x08418cdd…cb133`](https://lasna.reactscan.net/tx/0x08418cdddb59a1217e6f1098d0469755af2188c84b409c0aaf23b758ff9cb133) |
+| Destination: `triggerCircuitBreaker` (Base Sepolia) | [`0x1cbec3e9…7611`](https://sepolia.basescan.org/tx/0x1cbec3e9c9bb58c150f2f309eeb5fc30e901bd9455dfe727c8ee6d763f6b7611) |
+| Breaker cleared afterwards (`clearCircuitBreaker`) | [`0xefe27455…aa1f`](https://sepolia.basescan.org/tx/0xefe274559cfb52512ab9f094a9cb583ce4a2ba88f4a76dfbb607b9eb1076aa1f) |
+| Measured latency | origin → breaker **1 s** (Base Sepolia block timestamps, 1-second resolution). The Lasna hop is shown by block, not seconds, because two chains' clocks are not comparable to the second. |
+
+These come from `npm run drill -- --symbol AAPLc --bps 350` (also saved in `.data/drills.jsonl`). The DEX price in a drill is synthetic and labelled as such.
+If a real depeg happens during the event, its hashes will be added separately.
+
+## Tests
+
+`cd contracts && forge test` — 33 tests, including an end-to-end test of report → react → callback → breaker, foreign-RSC
+rejection, cooldown and callback-debt payment.
+
+## Links
+
+- Repo: `TODO` (public, MIT)
+- Demo video (< 3 min): `TODO`
+- Live board: `TODO`
