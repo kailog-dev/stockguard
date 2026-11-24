@@ -49,7 +49,26 @@ Both contracts are source-verified on Sourcify (Base Sepolia 84532, Lasna 531800
 | Measured latency | origin → breaker **1 s** (Base Sepolia block timestamps, 1-second resolution). The Lasna hop is shown by block, not seconds, because two chains' clocks are not comparable to the second. |
 
 These come from `npm run drill -- --symbol AAPLc --bps 350` (also saved in `.data/drills.jsonl`). The DEX price in a drill is synthetic and labelled as such.
-If a real depeg happens during the event, its hashes will be added separately.
+
+## Full loop on a real market event (live data, testnet breaker)
+
+On 2026-11-23 17:43 UTC (US session) MSTRc's Base DEX price (Uniswap pool, $98.1k liquidity) was $87.26 against a NAV
+of $85.20 (**+2.41%**), confirmed on two consecutive checks. No synthetic input: the same worker that posts the public
+Telegram alerts reported it, the sentinel reacted, and the breaker tripped. Four minutes later the gap was back to +0.83%
+and the breaker was cleared automatically.
+
+| Step | Tx |
+| --- | --- |
+| Origin: `reportMarket` (+241 bps) → `DepegAlertEmitted` (Base Sepolia) | [`0x0469e2ea…60f6fb`](https://sepolia.basescan.org/tx/0x0469e2ea5ab6cd7eb9a69da23f3bf1773cc626cdcc54ef89b9d9fa74de60f6fb) |
+| Reactive: `react()` → `SentinelFired` + callback request (Lasna, block 9,073,311) | [`0xef62524e…b5f732`](https://lasna.reactscan.net/tx/0xef62524eaa3bd45009f8de6c581425ee26567fe5eff61237a6bf83a920b5f732) |
+| Destination: `triggerCircuitBreaker` (Base Sepolia) | [`0xb56ac62d…2daae4`](https://sepolia.basescan.org/tx/0xb56ac62ddf5ddf793b04caa221e645a9d613fe5bfcd5389124125d44922daae4) |
+| Recovery report (+0.83%) | [`0x0995ebfb…8063d6`](https://sepolia.basescan.org/tx/0x0995ebfbba02d287d30ede59e70140b7383392a9aa09f46b27c4706dee8063d6) |
+| Breaker auto-cleared (`AUTO_CLEAR_BREAKER=true`) | [`0x523042b2…f0063d`](https://sepolia.basescan.org/tx/0x523042b2978f0825c97d4ba703b2aaa0ac65d426930e78b13ab5dcd15ef0063d) |
+| Observed latency | The worker saw the breaker active **about 4 s** after sending the report (worker clock). |
+
+The Lasna transaction's log carries `chainId 84532`, emitter = our registry and topic1 = the MSTRc token address
+(`0xb200…883d`), so it can be matched to the origin event by anyone. Matching alert and recovery messages are in the public
+Telegram channel.
 
 ## Tests
 
