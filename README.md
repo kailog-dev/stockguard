@@ -2,6 +2,8 @@
 
 **Is your tokenized stock trading at its real price?**
 
+**Live board:** https://stockguard.dev · **Demo (2:26):** https://youtu.be/do4QAVhfTRM · **Alerts:** https://t.me/stockguard_live
+
 Coinbase tokenized stocks on Base trade 24/7 on DEXs, but their reference value (NAV) comes from a Chainlink feed that
 only moves while the US market is open. Outside those hours, on thin pools, or during corporate actions, the DEX price can
 drift away from what the token is actually worth. Holders and trading agents usually can't see that gap.

@@ -6,6 +6,7 @@ import type { AssetDetail, Board, BoardRow, OnchainEvent, OnchainInfo, ScanResul
 const TELEGRAM_URL = import.meta.env.VITE_TELEGRAM_URL;
 const X_URL = import.meta.env.VITE_X_URL;
 const GITHUB_URL = 'https://github.com/kailog-dev/stockguard';
+const DEMO_URL = 'https://youtu.be/do4QAVhfTRM';
 const REFRESH_MS = 30_000;
 const FAKE_ADDRESS = '0x000000000000000000000000000000000000dEaD';
 
@@ -586,6 +587,7 @@ export default function App() {
         <p>StockGuard does not trade, route orders or hold funds. Open source (MIT).</p>
         <nav className="flex flex-wrap gap-x-4 gap-y-1">
           <a className="underline" href={GITHUB_URL} target="_blank" rel="noreferrer">GitHub</a>
+          <a className="underline" href={DEMO_URL} target="_blank" rel="noreferrer">Demo video</a>
           {X_URL && <a className="underline" href={X_URL} target="_blank" rel="noreferrer">Build log on X</a>}
           {TELEGRAM_URL && <a className="underline" href={TELEGRAM_URL} target="_blank" rel="noreferrer">Telegram alerts</a>}
           {onchain?.registry && <a className="underline" href={sepoliaAddr(onchain.registry)} target="_blank" rel="noreferrer">Base Sepolia registry</a>}
