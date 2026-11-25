@@ -70,6 +70,24 @@ The Lasna transaction's log carries `chainId 84532`, emitter = our registry and 
 (`0xb200…883d`), so it can be matched to the origin event by anyone. Matching alert and recovery messages are in the public
 Telegram channel.
 
+## Second real event, after the US close (live data, testnet breaker)
+
+On 2026-11-24 02:26 UTC, after the US close, the NAV was frozen and MSTRc's Base DEX price drifted **+2.30%** above it
+(peaking at +2.83% while the breaker was active). Same worker, same sentinel, no manual step. The gap closed to +0.79%
+27 minutes later and the breaker was cleared automatically.
+
+| Step | Tx |
+| --- | --- |
+| Origin: `reportMarket` (+230 bps) → `DepegAlertEmitted` (Base Sepolia) | [`0xd723b103…ade882`](https://sepolia.basescan.org/tx/0xd723b10399e1114dfcda40fe688762fcff9f7f2fa83b36b9f8c0008276ade882) |
+| Reactive: `react()` → `SentinelFired` + callback request (Lasna, block 9,102,904) | [`0x45ba993e…9e3172b`](https://lasna.reactscan.net/tx/0x45ba993e7f5d4a661ba544d965a278e1fa66616137c9dca0f2c83601d9e3172b) |
+| Destination: `triggerCircuitBreaker` (Base Sepolia) | [`0xfa64547b…68d424`](https://sepolia.basescan.org/tx/0xfa64547bc2969e8afb716523a4876f1de5151725891c7392358fef03fc68d424) |
+| Recovery report (+0.79%) | [`0x2d9f1437…376e55`](https://sepolia.basescan.org/tx/0x2d9f14378f813c65a055e35eeef2791a72199e2ac0d8114fb7ac787cf2376e55) |
+| Breaker auto-cleared | [`0xfdefc4b7…a30d74`](https://sepolia.basescan.org/tx/0xfdefc4b718ac417184a74e3e2db37fe06ec6c150745fd0d06f865aee28a30d74) |
+| Observed latency | Breaker active **about 4 s** after the report (worker clock: 02:26:51.6 → 02:26:55.2 UTC). |
+
+This is the case the project exists for: outside market hours the reference price cannot move, so only the DEX side can
+drift, and an LP or lending protocol has no live NAV to fall back on.
+
 ## Tests
 
 `cd contracts && forge test` — 33 tests, including an end-to-end test of report → react → callback → breaker, foreign-RSC
@@ -77,6 +95,6 @@ rejection, cooldown and callback-debt payment.
 
 ## Links
 
-- Repo: `TODO` (public, MIT)
+- Repo: https://github.com/kailog-dev/stockguard (public, MIT)
 - Demo video (< 3 min): `TODO`
-- Live board: `TODO`
+- Live board: https://stockguard.dev
