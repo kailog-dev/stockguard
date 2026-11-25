@@ -96,5 +96,5 @@ rejection, cooldown and callback-debt payment.
 ## Links
 
 - Repo: https://github.com/kailog-dev/stockguard (public, MIT)
-- Demo video (< 3 min): `TODO`
+- Demo video (2:26): https://youtu.be/do4QAVhfTRM
 - Live board: https://stockguard.dev

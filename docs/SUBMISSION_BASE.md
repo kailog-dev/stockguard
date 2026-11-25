@@ -10,10 +10,19 @@ The x402 agent endpoint is the supporting "agentic" angle; mention it, don't swi
 > StockGuard watches every Coinbase tokenized stock on Base, flags when the DEX price drifts from NAV, alerts on Telegram,
 > and trips an on-chain circuit breaker via @0xReactive — no keeper bot.
 >
-> Live: <URL> · Code: <repo>
+> Live: https://stockguard.dev · Code: https://github.com/kailog-dev/stockguard
+> Demo (2:26): https://youtu.be/do4QAVhfTRM
 > <N> visitors / <N> alert subscribers in <N> days.
 >
 > @buildonbase #StocksMaxxing
+
+## Links
+
+- Live board: https://stockguard.dev
+- Demo video (2:26): https://youtu.be/do4QAVhfTRM
+- Code (MIT): https://github.com/kailog-dev/stockguard
+- Alerts: https://t.me/stockguard_live
+- Build log: https://x.com/kailog_dev
 
 ## Form answers
 
@@ -30,7 +39,7 @@ pre-trade sanity check.
 - Daily unique visitors: …
 - Telegram channel members: …
 - Paid agent calls (x402): …
-- Real alerts posted: … (link each)
+- Real alerts posted: 2 on MSTRc, both with on-chain breaker trip + auto-clear (Nov 23 +2.41%, Nov 24 +2.30% / peak +2.83%); tx links in `docs/SUBMISSION_REACTIVE.md`
 
 **What is on-chain?**
 StockGuardRegistry on Base Sepolia (address), DepegSentinelRSC on Reactive Lasna (address), user attestations with a
