@@ -22,7 +22,7 @@ const ago = (t: number) => {
 };
 const agoShort = (t: number) => {
   const s = Math.max(0, Math.round((Date.now() - t) / 1000));
-  return s < 60 ? `${s}s` : s < 3600 ? `${Math.round(s / 60)}m` : s < 86_400 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 86_400)}d`;
+  return s < 60 ? `${s}s` : s < 3600 ? `${Math.round(s / 60)}m` : s < 172_800 ? `${Math.floor(s / 3600)}h` : `${Math.floor(s / 86_400)}d`;
 };
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 const sepoliaTx = (h: string) => `https://sepolia.basescan.org/tx/${h}`;
