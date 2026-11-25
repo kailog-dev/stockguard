@@ -5,7 +5,9 @@ import type { AssetDetail, Board, BoardRow, OnchainEvent, OnchainInfo, ScanResul
 
 const TELEGRAM_URL = import.meta.env.VITE_TELEGRAM_URL;
 const X_URL = import.meta.env.VITE_X_URL;
+const GITHUB_URL = 'https://github.com/kailog-dev/stockguard';
 const REFRESH_MS = 30_000;
+const FAKE_ADDRESS = '0x000000000000000000000000000000000000dEaD';
 
 // ------------------------------------------------------------------ formatting
 const usd = (n: number | null) =>
@@ -18,8 +20,14 @@ const ago = (t: number) => {
   const s = Math.max(0, Math.round((Date.now() - t) / 1000));
   return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.round(s / 60)}m ago` : `${Math.round(s / 3600)}h ago`;
 };
+const agoShort = (t: number) => {
+  const s = Math.max(0, Math.round((Date.now() - t) / 1000));
+  return s < 60 ? `${s}s` : s < 3600 ? `${Math.round(s / 60)}m` : s < 86_400 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 86_400)}d`;
+};
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 const sepoliaTx = (h: string) => `https://sepolia.basescan.org/tx/${h}`;
+const sepoliaAddr = (a: string) => `https://sepolia.basescan.org/address/${a}`;
+const lasnaAddr = (a: string) => `https://lasna.reactscan.net/address/${a}`;
 const baseAddr = (a: string) => `https://basescan.org/address/${a}`;
 
 function premiumClass(bps: number | null) {
@@ -51,6 +59,19 @@ function Card({ label, value, sub, tone }: { label: string; value: string; sub?:
       <div className={`mt-1 text-2xl font-semibold tnum ${tone ?? ''}`}>{value}</div>
       {sub && <div className="mt-1 text-xs text-muted">{sub}</div>}
     </div>
+  );
+}
+
+function BrandMark() {
+  return (
+    <svg viewBox="0 0 40 40" className="h-9 w-9 shrink-0" aria-hidden="true">
+      <rect x="0.5" y="0.5" width="39" height="39" rx="9" fill="#10141B" stroke="#262C36" />
+      <g transform="translate(4 4) scale(0.2667)">
+        <path d="M60 14 L94 26 V54 C94 77 79 93 60 102 C41 93 26 77 26 54 V26 Z" fill="none" stroke="#F5C451" strokeWidth={7} strokeLinejoin="round" />
+        <path d="M14 60 H40 L47 47 L55 73 L64 40 L71 60 H106" fill="none" stroke="#F5C451" strokeWidth={7} strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="64" cy="30" r="5.5" fill="#F04438" />
+      </g>
+    </svg>
   );
 }
 
@@ -95,17 +116,37 @@ function Sparkline({ points }: { points: { t: number; premiumBps: number | null 
   );
 }
 
+const EVENT_PILL: Record<OnchainEvent['kind'], [string, string, string]> = {
+  BREAKER_TRIPPED: ['BREAKER TRIPPED', 'bg-down/15 text-down', 'Circuit breaker tripped on Base Sepolia by the Reactive sentinel'],
+  BREAKER_CLEARED: ['CLEARED', 'bg-up/15 text-up', 'Gap back under 1% — breaker cleared'],
+  DRILL: ['DRILL', 'bg-warn/15 text-warn', 'Fire drill with a synthetic price (testnet)'],
+  REPORT: ['REPORT', 'bg-panel2 text-muted', 'Confirmed market report written to the registry'],
+  REGISTER: ['REGISTERED', 'bg-panel2 text-muted', 'Asset registered in the registry'],
+  HEARTBEAT: ['HEARTBEAT', 'bg-panel2 text-muted', 'Periodic market report'],
+};
+
 function EventKind({ e }: { e: OnchainEvent }) {
-  const label: Record<OnchainEvent['kind'], string> = {
-    REGISTER: 'registered',
-    REPORT: 'market report',
-    HEARTBEAT: 'heartbeat',
-    DRILL: 'DRILL (synthetic)',
-    BREAKER_TRIPPED: 'breaker tripped by Reactive',
-    BREAKER_CLEARED: 'breaker cleared',
-  };
-  const tone = e.kind === 'BREAKER_TRIPPED' ? 'text-down' : e.kind === 'DRILL' ? 'text-warn' : 'text-muted';
-  return <span className={tone}>{label[e.kind]}</span>;
+  const [label, cls, title] = EVENT_PILL[e.kind];
+  return (
+    <span title={title} className={`inline-block shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide ${cls}`}>
+      {label}
+    </span>
+  );
+}
+
+function EventItem({ e, withSymbol }: { e: OnchainEvent; withSymbol?: boolean }) {
+  return (
+    <li className="flex items-center justify-between gap-2 py-1">
+      <span className="flex min-w-0 items-center gap-2">
+        {withSymbol && <span className="font-semibold">{e.symbol}</span>}
+        <EventKind e={e} />
+        {typeof e.depegBps === 'number' && e.kind !== 'BREAKER_CLEARED' && <span className="tnum text-xs text-muted">{(e.depegBps / 100).toFixed(2)}%</span>}
+      </span>
+      <a className="shrink-0 whitespace-nowrap text-accent underline tnum" href={sepoliaTx(e.txHash)} target="_blank" rel="noreferrer">
+        {short(e.txHash)} · {agoShort(e.at)}
+      </a>
+    </li>
+  );
 }
 
 // ------------------------------------------------------------------ asset drawer
@@ -194,12 +235,9 @@ function AssetPanel({ symbol, board, onClose }: { symbol: string; board: Board; 
         {detail && detail.onchain.length > 0 && (
           <>
             <h3 className="mt-6 text-sm font-semibold text-muted">On-chain (Base Sepolia)</h3>
-            <ul className="mt-2 space-y-1 text-sm">
+            <ul className="mt-2 text-sm">
               {detail.onchain.map((e) => (
-                <li key={e.txHash} className="flex justify-between gap-2">
-                  <EventKind e={e} />
-                  <a className="text-accent underline tnum" href={sepoliaTx(e.txHash)} target="_blank" rel="noreferrer">{short(e.txHash)} · {ago(e.at)}</a>
-                </li>
+                <EventItem key={e.txHash} e={e} />
               ))}
             </ul>
           </>
@@ -226,17 +264,17 @@ function AssetPanel({ symbol, board, onClose }: { symbol: string; board: Board; 
 }
 
 // ------------------------------------------------------------------ token checker
-function Checker() {
+function Checker({ samples, onOpen }: { samples: { label: string; address: string }[]; onOpen: (symbol: string) => void }) {
   const [addr, setAddr] = useState('');
   const [res, setRes] = useState<ScanResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  async function go() {
+  async function go(target = addr) {
     setBusy(true);
     setErr(null);
     setRes(null);
     try {
-      setRes(await scanAddress(addr.trim()));
+      setRes(await scanAddress(target.trim()));
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Check failed');
     } finally {
@@ -254,10 +292,28 @@ function Checker() {
           placeholder="0x…"
           className="min-w-0 flex-1 rounded-lg border border-line bg-panel2 px-3 py-2 font-num text-sm outline-none focus:border-accent"
         />
-        <button disabled={busy || !/^0x[0-9a-fA-F]{40}$/.test(addr.trim())} onClick={go} className="btn-3d rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-onfill disabled:opacity-40">
+        <button disabled={busy || !/^0x[0-9a-fA-F]{40}$/.test(addr.trim())} onClick={() => go()} className="btn-3d rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-onfill disabled:opacity-40">
           {busy ? 'Checking…' : 'Check'}
         </button>
       </div>
+      {samples.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-muted">Try:</span>
+          {samples.map((s) => (
+            <button
+              key={s.address}
+              disabled={busy}
+              onClick={() => {
+                setAddr(s.address);
+                go(s.address);
+              }}
+              className="rounded-full border border-line bg-panel2 px-2.5 py-1 hover:border-accent disabled:opacity-40"
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      )}
       {err && <p className="mt-3 text-sm text-down">{err}</p>}
       {res && (
         <div className={`mt-3 rounded-lg p-3 text-sm ${res.verdict === 'OFFICIAL' ? 'bg-up/10' : 'bg-down/10'}`}>
@@ -265,6 +321,11 @@ function Checker() {
             <>
               <b className="text-up">Official:</b> {res.symbol} — {res.name}
               {res.result && <> · {pct(res.result.depegBps)} from NAV · grade {res.result.grade}</>}
+              {res.symbol && (
+                <button onClick={() => onOpen(res.symbol as string)} className="ml-2 font-semibold text-accent underline">
+                  Open chart →
+                </button>
+              )}
             </>
           ) : (
             <><b className="text-down">Not official.</b> {res.message}</>
@@ -284,6 +345,8 @@ export default function App() {
   const [open, setOpen] = useState<string | null>(() => decodeURIComponent(window.location.hash.slice(1)) || null);
   const [query, setQuery] = useState('');
   const [onlyFlagged, setOnlyFlagged] = useState(false);
+  const [quotedOnly, setQuotedOnly] = useState(true);
+  const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -316,19 +379,51 @@ export default function App() {
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (board?.rows ?? []).filter(
-      (r) => (!q || r.symbol.toLowerCase().includes(q) || r.name.toLowerCase().includes(q)) && (!onlyFlagged || Math.abs(r.premiumBps ?? 0) >= 50),
+      (r) =>
+        (!q || r.symbol.toLowerCase().includes(q) || r.name.toLowerCase().includes(q)) &&
+        (!quotedOnly || r.dexUsd !== null) &&
+        (!onlyFlagged || Math.abs(r.premiumBps ?? 0) >= 50),
     );
-  }, [board, query, onlyFlagged]);
+  }, [board, query, onlyFlagged, quotedOnly]);
 
-  const breakerEvents = (onchain?.events ?? []).filter((e) => e.kind === 'BREAKER_TRIPPED' || e.kind === 'DRILL' || e.kind === 'REPORT').slice(0, 8);
+  const breakerEvents = (onchain?.events ?? [])
+    .filter((e) => e.kind === 'BREAKER_TRIPPED' || e.kind === 'BREAKER_CLEARED' || e.kind === 'DRILL' || e.kind === 'REPORT')
+    .slice(0, 8);
   const worst = board?.summary.worst;
+
+  const samples = useMemo(() => {
+    const pick = ['MSTRc', 'NVDAc']
+      .map((s) => board?.rows.find((r) => r.symbol === s))
+      .filter((r): r is BoardRow => Boolean(r))
+      .map((r) => ({ label: r.symbol, address: r.address as string }));
+    return [...pick, { label: 'Fake 0x…dEaD', address: FAKE_ADDRESS }];
+  }, [board]);
+
+  const curlText = `curl -i ${apiUrl('/api/agent/risk?symbol=AAPLc')}
+# → 402 Payment Required with x402 payment requirements;
+#   pay with any x402 client (e.g. @x402/fetch) and retry.`;
+  async function copyCurl() {
+    try {
+      await navigator.clipboard.writeText(curlText.split('\n')[0]);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard blocked: the text is still selectable */
+    }
+  }
 
   return (
     <div className="mx-auto max-w-6xl px-4 pb-16">
       <header className="flex flex-wrap items-center justify-between gap-3 py-6">
-        <div>
-          <div className="text-xl font-bold">StockGuard</div>
-          <div className="text-sm text-muted">Is your tokenized stock trading at its real price?</div>
+        <div className="flex items-center gap-3">
+          <BrandMark />
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xl font-bold leading-tight">StockGuard</span>
+              <span className="rounded-md border border-line bg-panel2 px-1.5 py-0.5 text-[11px] font-medium text-muted">Base</span>
+            </div>
+            <div className="text-sm text-muted">Is your tokenized stock trading at its real price?</div>
+          </div>
         </div>
         <div className="flex items-center gap-3 text-sm">
           {board && (
@@ -363,6 +458,9 @@ export default function App() {
               <h2 className="text-lg font-semibold">NAV vs DEX — live board</h2>
               <div className="flex items-center gap-3 text-sm">
                 <label className="flex items-center gap-1 text-muted">
+                  <input type="checkbox" checked={quotedOnly} onChange={(e) => setQuotedOnly(e.target.checked)} /> with a DEX pool
+                </label>
+                <label className="flex items-center gap-1 text-muted">
                   <input type="checkbox" checked={onlyFlagged} onChange={(e) => setOnlyFlagged(e.target.checked)} /> gaps ≥ 0.5%
                 </label>
                 <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" className="w-36 rounded-lg border border-line bg-panel2 px-3 py-1 outline-none focus:border-accent" />
@@ -379,6 +477,7 @@ export default function App() {
                     <th className="px-4 py-2 text-right">Liquidity</th>
                     <th className="px-4 py-2">Grade</th>
                     <th className="px-4 py-2">Notes</th>
+                    <th className="w-6 px-2 py-2" aria-hidden="true" />
                   </tr>
                 </thead>
                 <tbody>
@@ -393,10 +492,33 @@ export default function App() {
                       <td className="px-4 py-2 text-xs text-muted">
                         {r.status === 'NO_DEX_QUOTE' ? 'no Base pool' : r.status === 'NO_NAV' ? 'no NAV' : r.flags.includes('THIN_DEX_LIQUIDITY_UNDER_50K') ? 'thin pool' : r.flags.includes('NAV_BASIS_UNVERIFIED') ? 'multiplier ≠ 1' : ''}
                       </td>
+                      <td className="px-2 py-2 text-right text-muted" title="24h chart and on-chain status">›</td>
                     </tr>
                   ))}
                   {rows.length === 0 && (
-                    <tr><td colSpan={7} className="px-4 py-8 text-center text-muted">{board.summary.total === 0 ? `Official list unavailable: ${board.sources.registry.error ?? 'no data'}` : 'No matches.'}</td></tr>
+                    <tr>
+                      <td colSpan={8} className="px-4 py-8 text-center text-muted">
+                        {board.summary.total === 0 ? (
+                          `Official list unavailable: ${board.sources.registry.error ?? 'no data'}`
+                        ) : onlyFlagged && !query.trim() ? (
+                          <>
+                            All {board.summary.quoted} quoted pools are currently within ±0.5% of NAV (normal market).
+                            <button onClick={() => setOnlyFlagged(false)} className="ml-2 font-semibold text-accent underline">
+                              Show all {board.summary.quoted} quoted pools
+                            </button>
+                          </>
+                        ) : quotedOnly ? (
+                          <>
+                            No token with a DEX pool matches.
+                            <button onClick={() => setQuotedOnly(false)} className="ml-2 font-semibold text-accent underline">
+                              Search all {board.summary.total} tokens
+                            </button>
+                          </>
+                        ) : (
+                          'No matches.'
+                        )}
+                      </td>
+                    </tr>
                   )}
                 </tbody>
               </table>
@@ -409,7 +531,7 @@ export default function App() {
       )}
 
       <div className="mt-6 grid gap-6 md:grid-cols-2">
-        <Checker />
+        <Checker samples={samples} onOpen={(s) => select(s)} />
 
         <section className="rounded-xl border border-line bg-panel p-5">
           <h2 className="text-lg font-semibold">Circuit breaker (Reactive Network)</h2>
@@ -418,38 +540,57 @@ export default function App() {
             breaker back on Base — no keeper bot in the loop.
           </p>
           {onchain?.registry ? (
-            <ul className="mt-3 space-y-1 text-sm">
-              {breakerEvents.length === 0 && <li className="text-muted">No reports yet.</li>}
-              {breakerEvents.map((e) => (
-                <li key={e.txHash} className="flex justify-between gap-2">
-                  <span>{e.symbol} · <EventKind e={e} /></span>
-                  <a className="text-accent underline tnum" href={sepoliaTx(e.txHash)} target="_blank" rel="noreferrer">{short(e.txHash)} · {ago(e.at)}</a>
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="mt-3 text-sm">
+                {breakerEvents.length === 0 && <li className="text-muted">No reports yet.</li>}
+                {breakerEvents.map((e) => (
+                  <EventItem key={e.txHash} e={e} withSymbol />
+                ))}
+              </ul>
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-line pt-3 text-xs">
+                <a className="text-accent underline" href={sepoliaAddr(onchain.registry)} target="_blank" rel="noreferrer">Registry · Base Sepolia</a>
+                {onchain.sentinel && (
+                  <a className="text-accent underline" href={lasnaAddr(onchain.sentinel)} target="_blank" rel="noreferrer">Sentinel · Reactive Lasna</a>
+                )}
+                <span className="text-muted">source-verified on Sourcify</span>
+              </div>
+            </>
           ) : (
             <p className="mt-3 text-sm text-muted">On-chain mirror not configured on this server.</p>
           )}
         </section>
 
         <section className="rounded-xl border border-line bg-panel p-5 md:col-span-2">
-          <h2 className="text-lg font-semibold">For agents: pay-per-check API (x402)</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-lg font-semibold">For agents: pay-per-check API (x402)</h2>
+            {agent?.payment ? (
+              <span className="rounded-full bg-up/15 px-2 py-0.5 text-xs font-semibold text-up">live · {agent.payment.price} · {agent.payment.network}</span>
+            ) : (
+              <span className="rounded-full bg-panel2 px-2 py-0.5 text-xs text-muted">{agent ? agent.status : '…'}</span>
+            )}
+          </div>
           <p className="mt-1 text-sm text-muted">
             Trading agents can call one endpoint before acting on a tokenized stock and pay per request in USDC — no API key, no account.
-            Status: {agent ? (agent.payment ? `live · ${agent.payment.price} on ${agent.payment.network}` : agent.status) : '…'}
           </p>
-          <pre className="mt-3 overflow-x-auto rounded-lg bg-panel2 p-3 text-xs">{`curl -i ${apiUrl('/api/agent/risk?symbol=AAPLc')}
-# → 402 Payment Required with x402 payment requirements;
-#   pay with any x402 client (e.g. @x402/fetch) and retry.`}</pre>
+          <div className="relative mt-3">
+            <pre className="overflow-x-auto rounded-lg bg-panel2 p-3 pr-20 text-xs">{curlText}</pre>
+            <button onClick={copyCurl} className="btn-3d absolute right-2 top-2 rounded-md border border-line bg-panel px-2 py-1 text-xs">
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
         </section>
       </div>
 
       <footer className="mt-10 space-y-2 text-xs text-muted">
         <p>{board?.disclaimer ?? 'Market-integrity data only. Not trading or investment advice. Coinbase tokenized stocks are not offered to US persons.'}</p>
-        <p>
-          StockGuard does not trade, route orders or hold funds. Open source.
-          {X_URL && <> · <a className="underline" href={X_URL} target="_blank" rel="noreferrer">Build log on X</a></>}
-        </p>
+        <p>StockGuard does not trade, route orders or hold funds. Open source (MIT).</p>
+        <nav className="flex flex-wrap gap-x-4 gap-y-1">
+          <a className="underline" href={GITHUB_URL} target="_blank" rel="noreferrer">GitHub</a>
+          {X_URL && <a className="underline" href={X_URL} target="_blank" rel="noreferrer">Build log on X</a>}
+          {TELEGRAM_URL && <a className="underline" href={TELEGRAM_URL} target="_blank" rel="noreferrer">Telegram alerts</a>}
+          {onchain?.registry && <a className="underline" href={sepoliaAddr(onchain.registry)} target="_blank" rel="noreferrer">Base Sepolia registry</a>}
+          {onchain?.sentinel && <a className="underline" href={lasnaAddr(onchain.sentinel)} target="_blank" rel="noreferrer">Reactive Lasna sentinel</a>}
+        </nav>
       </footer>
 
       {open && board && board.rows.some((r) => r.symbol === open) && <AssetPanel symbol={open} board={board} onClose={() => select(null)} />}
