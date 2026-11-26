@@ -39,7 +39,7 @@ const RPC = process.env.XLAYER_RPC_URL || 'https://rpc.xlayer.tech';
 const STATE_VIEW: Address = '0x76fd297e2d437cd7f76d50f01afe6160f86e9990'; // v4
 const QUOTER_V2: Address = '0xd1b797d92d87b688193a2b976efc8d577d204343'; // v3
 const GAP_BPS = 200; // 2 %
-const THIN_IMPACT = 0.02; // a $1,000 buy costing > 2 % over mid
+const THIN_IMPACT = 0.01; // a $1,000 buy costing > 1 % over mid (healthy pools here cost 0.05-0.35 %)
 const PROBE_USD = 1_000;
 const REF_MIN_LIQ_USD = 50_000;
 /** A pool price this far from the reference is not a market price (broken or junk initialisation). */
@@ -292,7 +292,7 @@ async function pass() {
     const inputs: Record<InputName, boolean> = {
       UNTRUSTED: trust === 'untrusted' || broken,
       THIN: !(impact <= THIN_IMPACT),
-      GAP: gap !== null && Math.abs(gap) >= GAP_BPS,
+      GAP: !broken && gap !== null && Math.abs(gap) >= GAP_BPS,
       CONFIRMED: false,
       CLOSED: marketClosed,
       STALE: !ref,
@@ -385,7 +385,7 @@ async function pass() {
 
   console.log(`\n[xl] ${new Date().toISOString()} ${rows.length} pools ${JSON.stringify(byVenue)} · ${JSON.stringify(summary)} · market ${marketClosed ? 'closed' : 'open'}`);
   for (const r of rows) {
-    const px = r.priceUsd === null ? 'n/a' : `$${r.priceUsd.toPrecision(6)}`;
+    const px = r.priceUsd === null ? 'n/a' : r.broken ? 'broken' : `$${r.priceUsd.toPrecision(6)}`;
     const ref = r.reference ? `ref $${r.reference.usd.toPrecision(6)} (${r.reference.source})` : 'no ref';
     const gap = r.gapBps === null ? '' : ` gap ${(r.gapBps / 100).toFixed(2)}%`;
     const imp = r.impactPct1k === null ? 'cost ∞' : `cost ${r.impactPct1k}% (${r.impactMethod})`;

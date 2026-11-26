@@ -128,4 +128,8 @@ test('US market hours helper', () => {
   assert.equal(isUsMarketClosed(new Date('2026-11-21T15:00:00Z')), true); // Saturday
   assert.equal(isUsMarketClosed(new Date('2026-11-23T15:00:00Z')), false); // Mon 10:00 ET
   assert.equal(isUsMarketClosed(new Date('2026-11-23T22:00:00Z')), true); // Mon 17:00 ET
+  assert.equal(isUsMarketClosed(new Date('2026-11-26T16:35:00Z')), true); // Thanksgiving 11:35 ET
+  assert.equal(isUsMarketClosed(new Date('2026-11-27T17:00:00Z')), false); // early-close day, 12:00 ET
+  assert.equal(isUsMarketClosed(new Date('2026-11-27T18:30:00Z')), true); // early-close day, 13:30 ET
+  assert.equal(isUsMarketClosed(new Date('2026-12-24T17:59:00Z')), false); // Christmas Eve 12:59 ET
 });

@@ -184,12 +184,25 @@ export function evaluateTokenizedStockRisk(input: RiskEvaluationInput): RiskEval
 }
 
 /**
- * US regular session check (09:30-16:00 America/New_York, Mon-Fri). Exchange holidays are not
- * modelled; the flag is advisory only.
+ * NYSE full-day closures and 1:00 p.m. ET early closes (nyse.com/trade/hours-calendars).
+ * Update once a year; a date missing here is treated as a normal session.
+ */
+export const NYSE_HOLIDAYS = new Set([
+  '2026-01-01', '2026-01-19', '2026-02-16', '2026-04-03', '2026-05-25', '2026-06-19', '2026-07-03', '2026-09-07', '2026-11-26', '2026-12-25',
+  '2027-01-01', '2027-01-18', '2027-02-15', '2027-03-26', '2027-05-31', '2027-06-18', '2027-07-05', '2027-09-06', '2027-11-25', '2027-12-24',
+]);
+export const NYSE_EARLY_CLOSES = new Set(['2026-11-27', '2026-12-24', '2027-11-26']);
+
+/**
+ * US regular session check (09:30-16:00 America/New_York, Mon-Fri), with NYSE holidays and
+ * 13:00 early closes. The flag is advisory only.
  */
 export function isUsMarketClosed(at: Date = new Date()): boolean {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
     weekday: 'short',
     hour: '2-digit',
     minute: '2-digit',
@@ -198,8 +211,11 @@ export function isUsMarketClosed(at: Date = new Date()): boolean {
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
   const day = get('weekday');
   if (day === 'Sat' || day === 'Sun') return true;
+  const date = `${get('year')}-${get('month')}-${get('day')}`;
+  if (NYSE_HOLIDAYS.has(date)) return true;
   const minutes = (Number(get('hour')) % 24) * 60 + Number(get('minute'));
-  return minutes < 9 * 60 + 30 || minutes >= 16 * 60;
+  const close = NYSE_EARLY_CLOSES.has(date) ? 13 * 60 : 16 * 60;
+  return minutes < 9 * 60 + 30 || minutes >= close;
 }
 
 /** Base Builder Code format guard (ERC-8021). The suffix itself is built with `ox/erc8021` in apps/web. */
