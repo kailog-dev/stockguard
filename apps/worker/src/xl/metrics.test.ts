@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { tickerOf, buyImpact, priceFromSqrt, gapBps } from './metrics.js';
+import { tickerOf, buyImpact, priceFromSqrt, gapBps, execImpact } from './metrics.js';
 
 test('tickerOf', () => {
   assert.equal(tickerOf('wAAPLx'), 'AAPL');
   assert.equal(tickerOf('ANTx'), 'ANT');
+  assert.equal(tickerOf('wBRK.Bx'), 'BRK.B');
   assert.equal(tickerOf('USDG'), null);
   assert.equal(tickerOf('oaoa'), null);
 });
@@ -23,6 +24,13 @@ test('price and impact are consistent in both orientations', () => {
   const sqrtInv = BigInt(Math.round(Math.sqrt(1 / p0in1raw) * 2 ** 96));
   const mirrored = buyImpact({ sqrtPriceX96: sqrtInv, liquidity: 10n ** 18n, stableIsToken0: true, stableDecimals: 6, usd: 1000 });
   assert.ok(Math.abs(mirrored - deep) / deep < 1e-6, `${mirrored} vs ${deep}`);
+});
+
+test('execImpact', () => {
+  // $1,000 bought 2.8 shares of a $355 mid → paid $357.14 each → +0.60 %
+  assert.ok(Math.abs(execImpact(1000, 2.8, 355) - 0.006036) < 1e-5);
+  assert.equal(execImpact(1000, 0, 355), Infinity);
+  assert.equal(execImpact(1000, 1, 0), Infinity);
 });
 
 test('gapBps', () => {
