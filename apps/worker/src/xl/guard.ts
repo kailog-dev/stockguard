@@ -42,8 +42,17 @@ const OUT_FILE = resolve(DATA_DIR, 'xl-board.json');
  * row is marked trust: "heuristic".
  */
 const PINNED_STABLES: Record<string, string> = {
-  // 'usdg-address-lowercase': 'USDG',
+  // Paxos Global Dollar on X Layer (BitGo token list, Global Dollar Network launch, Sep 2025)
+  '0x4ae46a509f6b1d9056937ba4500cb143933d2dc8': 'USDG',
+  // Circle-issued native USDC on X Layer (Circle contract-address table, Aug 2026)
+  '0xb6ceceab302e2e4948951ee7843fc24e92933061': 'USDC',
+  // USDC supported by the X Layer official bridge and OKX deposits (X Layer docs)
+  '0x74b7f16337b8972027f6196a17a631ac6de26d22': 'USDC',
 };
+/** Seen in pools but not verified from an issuer source yet → treated as untrusted. */
+const UNVERIFIED_STABLES = new Set(['0x0ff7a742b035504118a9d435c8264619a8428e1c' /* wUSDG */]);
+/** A pool price this far from the reference is not a market price (broken or junk initialisation). */
+const ABSURD_BPS = 5_000;
 
 const xLayer = defineChain({
   id: 196,
@@ -139,7 +148,7 @@ async function pass() {
     const qa = quote.address.toLowerCase();
     const quoteTrust: 'pinned' | 'heuristic' | 'untrusted' = pinned.has(qa)
       ? 'pinned'
-      : STABLE_SYMBOLS.includes(quote.symbol) && stableGuess.get(quote.symbol) === qa
+      : !UNVERIFIED_STABLES.has(qa) && STABLE_SYMBOLS.includes(quote.symbol) && stableGuess.get(quote.symbol) === qa
         ? 'heuristic'
         : 'untrusted';
 
@@ -158,8 +167,9 @@ async function pass() {
 
     const ref: Ref = xRefs.get(stock.address.toLowerCase()) ?? navRefs.get(ticker) ?? null;
     const gap = price !== null && ref && quoteTrust !== 'untrusted' ? gapBps(price, ref.usd) : null;
+    const broken = price === null || !Number.isFinite(price) || (gap !== null && Math.abs(gap) >= ABSURD_BPS);
     const inputs: Record<InputName, boolean> = {
-      UNTRUSTED: quoteTrust === 'untrusted' || price === null,
+      UNTRUSTED: quoteTrust === 'untrusted' || broken,
       THIN: !(impact <= THIN_IMPACT),
       GAP: gap !== null && Math.abs(gap) >= GAP_BPS,
       CONFIRMED: false,
@@ -177,7 +187,8 @@ async function pass() {
       hooks: p.hooks,
       priceUsd: price,
       reference: ref,
-      gapBps: gap,
+      gapBps: broken ? null : gap,
+      broken,
       impactPct1k: Number.isFinite(impact) ? Math.round(impact * 10_000) / 100 : null,
       inputs,
       verdict,
@@ -196,7 +207,7 @@ async function pass() {
     const ref = r.reference ? `ref $${r.reference.usd.toPrecision(6)} (${r.reference.source})` : 'no ref';
     const gap = r.gapBps === null ? '' : ` gap ${(r.gapBps / 100).toFixed(2)}%`;
     const imp = r.impactPct1k === null ? 'impact ∞' : `impact ${r.impactPct1k}%`;
-    const on = (Object.keys(r.inputs) as InputName[]).filter((k) => r.inputs[k]).join('+') || '-';
+    const on = (Object.keys(r.inputs) as InputName[]).filter((k) => r.inputs[k]).join('+') + (r.broken ? '+BROKEN_PRICE' : '') || '-';
     console.log(`  ${r.verdict.padEnd(12)} ${r.pair.padEnd(16)} ${px.padEnd(12)} ${ref}${gap} · ${imp} · quote ${r.quote.trust} · [${on}]`);
   }
   const quotes = [...new Map(rows.map((r) => [r.quote.address.toLowerCase(), `${r.quote.symbol} ${r.quote.address} (${r.quote.trust})`])).values()];
