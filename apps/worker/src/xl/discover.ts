@@ -6,8 +6,8 @@
  * flags pools whose tokens look like the OKXICE launch stocks, and writes
  * .data/xl-pools.json.
  *
- *   npx tsx apps/worker/src/xl/discover.ts            # pools created in the last 10 days
- *   npx tsx apps/worker/src/xl/discover.ts --days 60  # wider window
+ *   npx tsx apps/worker/src/xl/discover.ts                                  # Nov 19-24 (OKXICE launch window)
+ *   npx tsx apps/worker/src/xl/discover.ts --from 2026-11-01 --to 2026-11-25 --concurrency 6
  *
  * No private key, no transactions.
  */
@@ -79,37 +79,65 @@ function priceFromSqrt(sqrtPriceX96: bigint, dec0: number, dec1: number): number
   return r * r * 10 ** (dec0 - dec1);
 }
 
-async function findStartBlock(days: number): Promise<{ from: bigint; to: bigint; secsPerBlock: number }> {
-  const latest = await client.getBlock();
-  const probeBack = 200_000n;
-  const older = await client.getBlock({ blockNumber: latest.number > probeBack ? latest.number - probeBack : 0n });
-  const secsPerBlock = Number(latest.timestamp - older.timestamp) / Number(latest.number - older.number || 1n);
-  const blocksBack = BigInt(Math.ceil((days * 86_400) / Math.max(secsPerBlock, 0.1)));
-  const from = latest.number > blocksBack ? latest.number - blocksBack : 0n;
-  return { from, to: latest.number, secsPerBlock };
+/** first block at or after a unix timestamp (binary search on block timestamps) */
+async function blockAt(ts: number, lo: bigint, hi: bigint): Promise<bigint> {
+  while (lo < hi) {
+    const mid = (lo + hi) / 2n;
+    const b = await client.getBlock({ blockNumber: mid });
+    if (Number(b.timestamp) < ts) lo = mid + 1n;
+    else hi = mid;
+  }
+  return lo;
 }
 
-async function scanLogs(from: bigint, to: bigint) {
-  const out: Awaited<ReturnType<typeof getChunk>> = [];
-  let step = 50_000n;
-  let cursor = from;
-  async function getChunk(a: bigint, b: bigint) {
+function argValue(name: string): string | undefined {
+  const i = process.argv.indexOf(name);
+  return i > 0 ? process.argv[i + 1] : undefined;
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * X Layer's public RPC allows at most 100 blocks per eth_getLogs, so the window is split into
+ * 100-block chunks and fetched with limited concurrency and retry/backoff.
+ */
+async function scanLogs(from: bigint, to: bigint, concurrency: number) {
+  const STEP = 100n;
+  const chunks: [bigint, bigint][] = [];
+  for (let a = from; a <= to; a += STEP) chunks.push([a, a + STEP - 1n > to ? to : a + STEP - 1n]);
+  const results: Awaited<ReturnType<typeof fetchChunk>>[] = new Array(chunks.length);
+  async function fetchChunk(a: bigint, b: bigint) {
     return client.getLogs({ address: POOL_MANAGER, event: initializeEvent, fromBlock: a, toBlock: b });
   }
-  while (cursor <= to) {
-    const end = cursor + step - 1n > to ? to : cursor + step - 1n;
-    try {
-      const logs = await getChunk(cursor, end);
-      out.push(...logs);
-      process.stdout.write(`\r  scanned up to block ${end} (${out.length} pools)   `);
-      cursor = end + 1n;
-    } catch (e) {
-      if (step <= 500n) throw e;
-      step /= 2n; // RPC range limit — retry smaller
+  let next = 0;
+  let done = 0;
+  let found = 0;
+  const t0 = Date.now();
+  async function worker() {
+    while (next < chunks.length) {
+      const i = next++;
+      const [a, b] = chunks[i];
+      for (let attempt = 0; ; attempt++) {
+        try {
+          results[i] = await fetchChunk(a, b);
+          found += results[i].length;
+          break;
+        } catch (e) {
+          if (attempt >= 6) throw e;
+          await sleep(500 * 2 ** attempt); // rate limit / transient error
+        }
+      }
+      done++;
+      if (done % 50 === 0 || done === chunks.length) {
+        const secs = (Date.now() - t0) / 1000;
+        const eta = (secs / done) * (chunks.length - done);
+        process.stdout.write(`\r  ${done}/${chunks.length} chunks, ${found} pools, ~${Math.ceil(eta)}s left   `);
+      }
     }
   }
+  await Promise.all(Array.from({ length: concurrency }, worker));
   process.stdout.write('\n');
-  return out;
+  return results.flat();
 }
 
 function looksLikeStock(t: TokenInfo): string | null {
@@ -118,17 +146,24 @@ function looksLikeStock(t: TokenInfo): string | null {
 }
 
 async function main() {
-  const daysArg = process.argv.indexOf('--days');
-  const days = daysArg > 0 ? Number(process.argv[daysArg + 1]) : 10;
+  // OKXICE launch notice: Nov 20, 2026; trading opened Nov 23 (noon ET). Pools were created in between.
+  const fromDate = argValue('--from') ?? '2026-11-19';
+  const toDate = argValue('--to') ?? '2026-11-24';
+  const concurrency = Number(argValue('--concurrency') ?? 8);
   console.log(`X Layer RPC: ${RPC}`);
   const chainId = await client.getChainId();
   if (chainId !== 196) throw new Error(`expected chain 196, got ${chainId}`);
   const code = await client.getCode({ address: POOL_MANAGER });
   if (!code || code === '0x') throw new Error('no PoolManager bytecode at the expected address');
 
-  const { from, to, secsPerBlock } = await findStartBlock(days);
-  console.log(`Scanning Initialize events, last ${days} days: blocks ${from}..${to} (~${secsPerBlock.toFixed(2)} s/block)`);
-  const logs = await scanLogs(from, to);
+  const latest = await client.getBlock();
+  const fromTs = Date.parse(`${fromDate}T00:00:00Z`) / 1000;
+  const toTs = Math.min(Date.parse(`${toDate}T23:59:59Z`) / 1000, Number(latest.timestamp));
+  const from = await blockAt(fromTs, 0n, latest.number);
+  const to = (await blockAt(toTs, from, latest.number)) || latest.number;
+  console.log(`Scanning Initialize events ${fromDate} .. ${toDate} UTC: blocks ${from}..${to} (${to - from + 1n} blocks, 100 per request, x${concurrency})`);
+  const logs = await scanLogs(from, to, concurrency);
+  const days = `${fromDate}..${toDate}`;
 
   const pools = [];
   for (const log of logs) {
