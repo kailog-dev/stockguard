@@ -7,11 +7,12 @@
  * .data/xl-pools.json.
  *
  *   npx tsx apps/worker/src/xl/discover.ts                                  # Nov 19-24 (OKXICE launch window)
- *   npx tsx apps/worker/src/xl/discover.ts --from 2026-11-01 --to 2026-11-25 --concurrency 6
+ *   npx tsx apps/worker/src/xl/discover.ts --from 2026-11-01 --to 2026-11-25 --concurrency 2
+ *   If it stops (rate limit), just run it again: finished chunks are cached in .data/xl-scan-cache.json.
  *
  * No private key, no transactions.
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createPublicClient, defineChain, http, parseAbi, parseAbiItem, type Address, type Hex } from 'viem';
@@ -29,7 +30,7 @@ const xLayer = defineChain({
   nativeCurrency: { name: 'OKB', symbol: 'OKB', decimals: 18 },
   rpcUrls: { default: { http: [RPC] } },
 });
-const client = createPublicClient({ chain: xLayer, transport: http(RPC, { timeout: 30_000, retryCount: 2 }) });
+const client = createPublicClient({ chain: xLayer, transport: http(RPC, { timeout: 30_000, retryCount: 6, retryDelay: 2_000 }) });
 
 const initializeEvent = parseAbiItem(
   'event Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)',
@@ -97,47 +98,69 @@ function argValue(name: string): string | undefined {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+type InitLog = {
+  id: Hex; currency0: Address; currency1: Address; fee: number; tickSpacing: number;
+  hooks: Address; blockNumber: string; transactionHash: Hex;
+};
+
+const here = dirname(fileURLToPath(import.meta.url));
+const DATA_DIR = resolve(here, '../../../../.data');
+const CACHE_FILE = resolve(DATA_DIR, 'xl-scan-cache.json');
+
 /**
- * X Layer's public RPC allows at most 100 blocks per eth_getLogs, so the window is split into
- * 100-block chunks and fetched with limited concurrency and retry/backoff.
+ * X Layer's public RPC allows at most 100 blocks per eth_getLogs and rate-limits bursts (HTTP 429).
+ * The window is split into 100-block chunks, fetched with low concurrency and patient backoff,
+ * and progress is cached so a rerun resumes instead of starting over.
  */
-async function scanLogs(from: bigint, to: bigint, concurrency: number) {
+async function scanLogs(from: bigint, to: bigint, concurrency: number): Promise<InitLog[]> {
   const STEP = 100n;
+  const cache: Record<string, InitLog[]> = existsSync(CACHE_FILE) ? JSON.parse(readFileSync(CACHE_FILE, 'utf8')) : {};
+  const saveCache = () => { mkdirSync(DATA_DIR, { recursive: true }); writeFileSync(CACHE_FILE, JSON.stringify(cache)); };
   const chunks: [bigint, bigint][] = [];
   for (let a = from; a <= to; a += STEP) chunks.push([a, a + STEP - 1n > to ? to : a + STEP - 1n]);
-  const results: Awaited<ReturnType<typeof fetchChunk>>[] = new Array(chunks.length);
-  async function fetchChunk(a: bigint, b: bigint) {
-    return client.getLogs({ address: POOL_MANAGER, event: initializeEvent, fromBlock: a, toBlock: b });
-  }
+  const todo = chunks.filter(([a]) => !cache[String(a)]);
+  console.log(`  ${chunks.length - todo.length}/${chunks.length} chunks already cached, ${todo.length} to fetch`);
+
   let next = 0;
   let done = 0;
-  let found = 0;
+  let pause = 0; // shared cool-down after a 429
   const t0 = Date.now();
   async function worker() {
-    while (next < chunks.length) {
-      const i = next++;
-      const [a, b] = chunks[i];
+    while (next < todo.length) {
+      const [a, b] = todo[next++];
       for (let attempt = 0; ; attempt++) {
+        if (pause > Date.now()) await sleep(pause - Date.now());
         try {
-          results[i] = await fetchChunk(a, b);
-          found += results[i].length;
+          const logs = await client.getLogs({ address: POOL_MANAGER, event: initializeEvent, fromBlock: a, toBlock: b });
+          cache[String(a)] = logs.map((l) => ({
+            id: l.args.id as Hex, currency0: l.args.currency0 as Address, currency1: l.args.currency1 as Address,
+            fee: Number(l.args.fee), tickSpacing: Number(l.args.tickSpacing), hooks: l.args.hooks as Address,
+            blockNumber: String(l.blockNumber), transactionHash: l.transactionHash as Hex,
+          }));
           break;
         } catch (e) {
-          if (attempt >= 6) throw e;
-          await sleep(500 * 2 ** attempt); // rate limit / transient error
+          if (attempt >= 12) { saveCache(); throw e; }
+          const wait = Math.min(60_000, 2_000 * 2 ** attempt);
+          pause = Math.max(pause, Date.now() + wait); // everyone backs off together
         }
       }
       done++;
-      if (done % 50 === 0 || done === chunks.length) {
+      if (done % 100 === 0) saveCache();
+      if (done % 50 === 0 || done === todo.length) {
         const secs = (Date.now() - t0) / 1000;
-        const eta = (secs / done) * (chunks.length - done);
-        process.stdout.write(`\r  ${done}/${chunks.length} chunks, ${found} pools, ~${Math.ceil(eta)}s left   `);
+        const eta = (secs / done) * (todo.length - done);
+        const found = Object.values(cache).reduce((n, l) => n + l.length, 0);
+        process.stdout.write(`\r  ${done}/${todo.length} fetched, ${found} pools so far, ~${Math.ceil(eta)}s left   `);
       }
     }
   }
-  await Promise.all(Array.from({ length: concurrency }, worker));
+  try {
+    await Promise.all(Array.from({ length: concurrency }, worker));
+  } finally {
+    saveCache();
+  }
   process.stdout.write('\n');
-  return results.flat();
+  return chunks.flatMap(([a]) => cache[String(a)] ?? []);
 }
 
 function looksLikeStock(t: TokenInfo): string | null {
@@ -149,7 +172,7 @@ async function main() {
   // OKXICE launch notice: Nov 20, 2026; trading opened Nov 23 (noon ET). Pools were created in between.
   const fromDate = argValue('--from') ?? '2026-11-19';
   const toDate = argValue('--to') ?? '2026-11-24';
-  const concurrency = Number(argValue('--concurrency') ?? 8);
+  const concurrency = Number(argValue('--concurrency') ?? 3);
   console.log(`X Layer RPC: ${RPC}`);
   const chainId = await client.getChainId();
   if (chainId !== 196) throw new Error(`expected chain 196, got ${chainId}`);
@@ -161,13 +184,13 @@ async function main() {
   const toTs = Math.min(Date.parse(`${toDate}T23:59:59Z`) / 1000, Number(latest.timestamp));
   const from = await blockAt(fromTs, 0n, latest.number);
   const to = (await blockAt(toTs, from, latest.number)) || latest.number;
-  console.log(`Scanning Initialize events ${fromDate} .. ${toDate} UTC: blocks ${from}..${to} (${to - from + 1n} blocks, 100 per request, x${concurrency})`);
+  console.log(`Scanning Initialize events ${fromDate} .. ${toDate} UTC: blocks ${from}..${to} (${to - from + 1n} blocks, 100 per request, x${concurrency}; progress is cached, rerun to resume)`);
   const logs = await scanLogs(from, to, concurrency);
   const days = `${fromDate}..${toDate}`;
 
   const pools = [];
   for (const log of logs) {
-    const a = log.args;
+    const a = log;
     const t0 = await token(a.currency0 as Address);
     const t1 = await token(a.currency1 as Address);
     const stock = looksLikeStock(t0) ?? looksLikeStock(t1);
@@ -182,7 +205,7 @@ async function main() {
     }
     pools.push({
       poolId: a.id,
-      block: String(log.blockNumber),
+      block: log.blockNumber,
       tx: log.transactionHash,
       fee: a.fee,
       tickSpacing: a.tickSpacing,
@@ -209,8 +232,7 @@ async function main() {
     for (const p of pools) console.log(`  ${p.currency0.symbol}/${p.currency1.symbol}  ${p.poolId}  hooks=${p.hooks}`);
   }
 
-  const here = dirname(fileURLToPath(import.meta.url));
-  const outFile = resolve(here, '../../../../.data/xl-pools.json');
+  const outFile = resolve(DATA_DIR, 'xl-pools.json');
   mkdirSync(dirname(outFile), { recursive: true });
   writeFileSync(
     outFile,

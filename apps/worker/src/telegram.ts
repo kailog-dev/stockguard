@@ -1,3 +1,10 @@
+/** fetch() hides the real network error in err.cause; surface its code (never the URL, which holds the token). */
+function describe(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  const c = (err as Error & { cause?: { code?: string; message?: string } }).cause;
+  return c ? `${err.message} (${c.code ?? ''}${c.code && c.message ? ': ' : ''}${c.message ?? ''})` : err.message;
+}
+
 /** Minimal Telegram Bot API sender. Failures are logged, never thrown: alerts must not stop the poll loop. */
 export async function sendTelegram(cfg: { token: string; chatId: string }, html: string): Promise<boolean> {
   const ctrl = new AbortController();
@@ -16,7 +23,7 @@ export async function sendTelegram(cfg: { token: string; chatId: string }, html:
     }
     return true;
   } catch (err) {
-    console.error('[telegram] send failed:', err instanceof Error ? err.message : err);
+    console.error('[telegram] send failed:', describe(err));
     return false;
   } finally {
     clearTimeout(timer);
@@ -56,6 +63,6 @@ export async function checkTelegram(cfg: { token: string; chatId: string }): Pro
       ? { ok: true, message: `${botName} can post to ${cfg.chatId}` }
       : { ok: false, message: `${botName} is "${status}" in ${cfg.chatId} without permission to post — make it an admin with "Post messages"` };
   } catch (err) {
-    return { ok: false, message: `Telegram unreachable: ${err instanceof Error ? err.message : String(err)}` };
+    return { ok: false, message: `Telegram unreachable: ${describe(err)}` };
   }
 }
