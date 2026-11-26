@@ -1,3 +1,14 @@
+import dns from 'node:dns';
+import net from 'node:net';
+
+// Network defaults for every worker entry point (all of them import this file first).
+// The server has no working IPv6 route, and Node's "happy eyeballs" gives each address only 250 ms
+// before moving on. From Tokyo, Telegram's IPv4 handshake can take longer than that, so the attempt
+// was abandoned, the IPv6 fallback failed, and fetch() reported ETIMEDOUT. Prefer IPv4 and connect
+// to one address at a time with the normal OS timeout.
+dns.setDefaultResultOrder('ipv4first');
+net.setDefaultAutoSelectFamily(false);
+
 /** Worker configuration from environment variables (.env at the repo root). */
 import { isAddress } from 'viem';
 
