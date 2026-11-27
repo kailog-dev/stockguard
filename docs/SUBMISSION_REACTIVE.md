@@ -35,6 +35,7 @@ the breaker trips even if our worker goes offline after reporting.
 | --- | --- | --- |
 | StockGuardRegistry | Base Sepolia (84532) | [`0xfBF0411b0F2b99680982e3dC69a83B5EF1fb44c4`](https://sepolia.basescan.org/address/0xfBF0411b0F2b99680982e3dC69a83B5EF1fb44c4) |
 | DepegSentinelRSC | Reactive Lasna (5318007) | [`0xdF847EF0e8454362EaB6F5F4c2b0E235580739DE`](https://lasna.reactscan.net/address/0xdF847EF0e8454362EaB6F5F4c2b0E235580739DE) |
+| GuardedVault (example consumer) | Base Sepolia (84532) | [`0xe7F8abb356debAD44462fcf1e0B597C4CFFfDA06`](https://sepolia.basescan.org/address/0xe7F8abb356debAD44462fcf1e0B597C4CFFfDA06) |
 
 Both contracts are source-verified on Sourcify (Base Sepolia 84532, Lasna 5318007).
 
@@ -88,10 +89,32 @@ On 2026-11-24 02:26 UTC, after the US close, the NAV was frozen and MSTRc's Base
 This is the case the project exists for: outside market hours the reference price cannot move, so only the DEX side can
 drift, and an LP or lending protocol has no live NAV to fall back on.
 
+## The breaker stops money at a consumer contract (GuardedVault, Nov 27 drill)
+
+[`GuardedVault`](https://sepolia.basescan.org/address/0xe7F8abb356debAD44462fcf1e0B597C4CFFfDA06) is an example lending-style consumer on Base Sepolia
+(deploy tx [`0x2bb81f2a…5952`](https://sepolia.basescan.org/tx/0x2bb81f2ac2bf1129cda04ae01a10bff9d80fe60550960e39493aa0b6df765952)). Its whole
+integration is one modifier that calls `isHealthy(asset)` on the registry, and it fails closed if the registry cannot be
+read. The drill below ran end to end on AAPLc: accepted → refused → accepted. The depeg in step B is **synthetic (DRILL)**;
+GuardedVault only keeps a ledger, no tokens move.
+
+| Step | Event | Tx |
+| --- | --- | --- |
+| A. `tryDepositCollateral` while healthy | CollateralAccepted | [`0x1d601c26…d7c0`](https://sepolia.basescan.org/tx/0x1d601c26b8d38f878e8a24e32ef80cf7654d8d08915c4292d418cd21845ed7c0) |
+| B. DRILL `reportMarket` (synthetic −3.50%) | DepegAlertEmitted | [`0x19cae295…8524`](https://sepolia.basescan.org/tx/0x19cae29546d7bfebbf574c63233739bafcaeade949b4778eaa47a3af9b038524) |
+| B. Reactive callback `triggerCircuitBreaker` | CircuitBreakerTriggered | [`0x764362d5…de9f`](https://sepolia.basescan.org/tx/0x764362d56b3ff13c016005af0218b717fbd8f5f66b063fd54d696a663acede9f) |
+| C. `tryDepositCollateral` while the breaker is on | **CollateralRefused** | [`0x1646ef86…ea12`](https://sepolia.basescan.org/tx/0x1646ef86dfdcaf32bd5969e832de9a8548ad5f16fc678927f87ea7e109b3ea12) |
+| D. Real-price `reportMarket` (grade back to A) | MarketReported | [`0x87508f9e…ae93`](https://sepolia.basescan.org/tx/0x87508f9eb5da6b5ee0b8918aceb6f73af3bdc67fd6b1c74d1b1dc12dbf19ae93) |
+| D. `clearCircuitBreaker` (owner) | CircuitBreakerCleared | [`0xb3ef089c…3ff9`](https://sepolia.basescan.org/tx/0xb3ef089cba3582554af86c6febc8524dd1b73ff0249859c03222edcbe4c03ff9) |
+| D. `tryDepositCollateral` after clear | CollateralAccepted | [`0x42abfee0…13d0`](https://sepolia.basescan.org/tx/0x42abfee086124a7fd6bae4daffea956be27612ff20d6afe8a6e42aa3d37313d0) |
+
+Reproduce: `cd apps/worker && npx tsx --env-file-if-exists=../../.env src/vault-drill.ts --vault 0xe7F8abb356debAD44462fcf1e0B597C4CFFfDA06 --symbol AAPLc --bps 350`
+(results in `.data/vault-drills.jsonl`).
+
 ## Tests
 
-`cd contracts && forge test` — 33 tests, including an end-to-end test of report → react → callback → breaker, foreign-RSC
-rejection, cooldown and callback-debt payment.
+`cd contracts && forge test` — 38 tests, including an end-to-end test of report → react → callback → breaker, foreign-RSC
+rejection, cooldown, callback-debt payment, and GuardedVault (accepts when healthy, refuses when tripped, fails closed
+when the registry cannot be read).
 
 ## Links
 

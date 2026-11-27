@@ -42,8 +42,16 @@ pre-trade sanity check.
 - Real alerts posted: 2 on MSTRc, both with on-chain breaker trip + auto-clear (Nov 23 +2.41%, Nov 24 +2.30% / peak +2.83%); tx links in `docs/SUBMISSION_REACTIVE.md`
 
 **What is on-chain?**
-StockGuardRegistry on Base Sepolia (address), DepegSentinelRSC on Reactive Lasna (address), user attestations with a
-Base Builder Code (ERC-8021). Keeper transactions carry no Builder Code.
+StockGuardRegistry on Base Sepolia (`0xfBF0411b0F2b99680982e3dC69a83B5EF1fb44c4`), DepegSentinelRSC on Reactive Lasna
+(`0xdF847EF0e8454362EaB6F5F4c2b0E235580739DE`), user attestations with a Base Builder Code (ERC-8021). Keeper
+transactions carry no Builder Code.
+
+**How does a protocol use it? (Programmable Stock Markets)**
+One modifier. [`GuardedVault`](https://sepolia.basescan.org/address/0xe7F8abb356debAD44462fcf1e0B597C4CFFfDA06) on Base Sepolia accepts a tokenized stock as
+collateral only while `isHealthy(asset)` is true, and fails closed if the registry cannot be read. Nov 27 drill on AAPLc
+(synthetic depeg, labelled DRILL): deposit accepted [`0x1d601c26…d7c0`](https://sepolia.basescan.org/tx/0x1d601c26b8d38f878e8a24e32ef80cf7654d8d08915c4292d418cd21845ed7c0) → Reactive trips the breaker [`0x764362d5…de9f`](https://sepolia.basescan.org/tx/0x764362d56b3ff13c016005af0218b717fbd8f5f66b063fd54d696a663acede9f) →
+deposit **refused** [`0x1646ef86…ea12`](https://sepolia.basescan.org/tx/0x1646ef86dfdcaf32bd5969e832de9a8548ad5f16fc678927f87ea7e109b3ea12) → real price reported and breaker cleared → deposit accepted [`0x42abfee0…13d0`](https://sepolia.basescan.org/tx/0x42abfee086124a7fd6bae4daffea956be27612ff20d6afe8a6e42aa3d37313d0).
+Full table in `docs/SUBMISSION_REACTIVE.md`.
 
 **Compliance**
 StockGuard is read-only. It does not offer trading, routing or quotes for execution, and it states on every page and
