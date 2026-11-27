@@ -11,7 +11,7 @@ The x402 agent endpoint is the supporting "agentic" angle; mention it, don't swi
 > and trips an on-chain circuit breaker via @0xReactive — no keeper bot.
 >
 > Live: https://stockguard.dev · Code: https://github.com/kailog-dev/stockguard
-> Demo (2:26): https://youtu.be/do4QAVhfTRM
+> Demo (2:51): https://youtu.be/vCOzmeiQNus
 > <N> visitors / <N> alert subscribers in <N> days.
 >
 > @buildonbase #StocksMaxxing
@@ -19,7 +19,7 @@ The x402 agent endpoint is the supporting "agentic" angle; mention it, don't swi
 ## Links
 
 - Live board: https://stockguard.dev
-- Demo video (2:26): https://youtu.be/do4QAVhfTRM
+- Demo video (2:51): https://youtu.be/vCOzmeiQNus
 - Code (MIT): https://github.com/kailog-dev/stockguard
 - Alerts: https://t.me/stockguard_live
 - Build log: https://x.com/kailog_dev

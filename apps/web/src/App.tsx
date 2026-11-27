@@ -6,7 +6,7 @@ import type { AssetDetail, Board, BoardRow, OnchainEvent, OnchainInfo, ScanResul
 const TELEGRAM_URL = import.meta.env.VITE_TELEGRAM_URL;
 const X_URL = import.meta.env.VITE_X_URL;
 const GITHUB_URL = 'https://github.com/kailog-dev/stockguard';
-const DEMO_URL = 'https://youtu.be/do4QAVhfTRM';
+const DEMO_URL = 'https://youtu.be/vCOzmeiQNus';
 const REFRESH_MS = 30_000;
 const FAKE_ADDRESS = '0x000000000000000000000000000000000000dEaD';
 
