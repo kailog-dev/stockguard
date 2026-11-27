@@ -11,6 +11,7 @@
  *   GET  /api/alerts                   hash-chained alert log + chain verification
  *   POST /api/scan  { address }        "is this token an official Coinbase tokenized stock?"
  *   GET  /api/agent                    machine-readable description of the paid agent endpoint
+ *   GET  /api/xl                       X Layer routing verdicts (apps/api/src/xl.ts)
  * Paid (agents, x402):
  *   GET  /api/agent/risk?symbol=AAPLc   same data as one board row, settled per call in USDC via x402
  */
@@ -42,6 +43,7 @@ import {
   RiskInputError,
   verifyAuditChain,
 } from '@stockguard/core';
+import { registerXl } from './xl.js';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const STALE_BOARD_SEC = 300;
@@ -318,6 +320,8 @@ app.get('/api/agent/risk', async (c) => {
   const payload = { row, generatedAt: board.generatedAt, marketClosed: board.marketClosed };
   return c.json({ ...payload, reportHash: computeReportHash(payload), disclaimer: DISCLAIMER });
 });
+
+registerXl(app);
 
 app.notFound((c) => c.json({ error: 'Not found' }, 404));
 

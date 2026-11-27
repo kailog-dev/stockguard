@@ -6,7 +6,7 @@
  *
  * Inputs (bit i of the eval input = input pin i):
  *   0 UNTRUSTED  token or quote asset is not on the trusted list (look-alike, junk pair)
- *   1 THIN       a $1,000 trade would move the pool price more than 2 %
+ *   1 THIN       a $1,000 buy would cost more than 1 % over the pool mid price
  *   2 GAP        pool price is ≥ 2 % away from the reference price
  *   3 CONFIRMED  the gap was also there on the previous check
  *   4 CLOSED     US market closed → the reference share price is frozen

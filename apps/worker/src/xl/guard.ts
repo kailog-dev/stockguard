@@ -30,7 +30,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createPublicClient, defineChain, http, parseAbi, type Address, type Hex } from 'viem';
-import { evaluate, NETLIST_HASH, type InputName, type Verdict } from './circuit.js';
+import { evaluate, GATES, INPUTS, NETLIST_HASH, NETLIST_HEX, OUTPUTS, type InputName, type Verdict } from './circuit.js';
 import { buyImpact, execImpact, gapBps, priceFromSqrt, STABLE_SYMBOLS, tickerOf } from './metrics.js';
 import { isStockToken } from './discover-v3.js';
 
@@ -374,7 +374,7 @@ async function pass() {
     generatedAt: Date.now(),
     chainId: 196,
     marketClosed,
-    circuit: { netlistHash: NETLIST_HASH },
+    circuit: { netlistHash: NETLIST_HASH, netlistHex: NETLIST_HEX, inputs: INPUTS, outputs: OUTPUTS, gates: GATES, firstGate: 2 + INPUTS.length },
     thresholds: { GAP_BPS, THIN_IMPACT, PROBE_USD, ABSURD_BPS },
     summary,
     byVenue,
