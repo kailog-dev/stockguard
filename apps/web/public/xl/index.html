@@ -238,9 +238,9 @@
     rows.forEach((r) => (byT[r.ticker] ||= []).push(r));
     const pairs = Object.entries(byT).map(([t, rs]) => {
       const ok = rs.filter((r) => r.verdict !== 'DO_NOT_ROUTE').sort((a, b) => (a.verdict === 'ROUTE_OK' ? 0 : 1) - (b.verdict === 'ROUTE_OK' ? 0 : 1) || a.impactPct1k - b.impactPct1k)[0];
-      const bad = rs.filter((r) => r.verdict === 'DO_NOT_ROUTE' && !r.inputs.UNTRUSTED).sort((a, b) => (b.impactPct1k ?? 1e12) - (a.impactPct1k ?? 1e12))[0];
+      const bad = rs.filter((r) => r.verdict === 'DO_NOT_ROUTE' && !r.inputs.UNTRUSTED).sort((a, b) => (b.impactPct1k ?? -1) - (a.impactPct1k ?? -1))[0];
       return ok && bad ? { t, ok, bad } : null;
-    }).filter(Boolean).sort((a, b) => (b.bad.impactPct1k ?? 1e12) - (a.bad.impactPct1k ?? 1e12)).slice(0, 6);
+    }).filter(Boolean).sort((a, b) => (b.bad.impactPct1k ?? -1) - (a.bad.impactPct1k ?? -1)).slice(0, 6);
     const leg = (r) => `<div class="leg" data-id="${esc(r.poolId)}"><span class="badge ${BADGE[r.verdict]}">${LABEL[r.verdict]}</span><span class="pair">${esc(r.pair)}</span><span class="cost">${pct(r.impactPct1k)}</span><span class="why">${esc(reasons(r))}</span></div>`;
     $('pairs').innerHTML = pairs.length
       ? pairs.map((p) => `<div class="card"><h3>${esc(p.t)}</h3>${leg(p.ok)}${leg(p.bad)}</div>`).join('')
