@@ -7,6 +7,9 @@ Track: **Every Second Counts** (DeFi where reaction time matters; Base Sepolia +
 StockGuard trips an on-chain circuit breaker for tokenized stocks on Base the moment their DEX price breaks away from NAV —
 the Reactive contract is the only thing between the alert and the breaker. No keeper bot.
 
+**Measured:** origin report → breaker in **2 s median, 2 s max** over a 5-round drill series (8 blocks median on Base Sepolia);
+every transaction is linked below.
+
 ## Problem
 
 Coinbase tokenized stocks on Base trade around the clock, but their Chainlink NAV only moves during US market hours.
@@ -50,6 +53,40 @@ Both contracts are source-verified on Sourcify (Base Sepolia 84532, Lasna 531800
 | Measured latency | origin → breaker **1 s** (Base Sepolia block timestamps, 1-second resolution). The Lasna hop is shown by block, not seconds, because two chains' clocks are not comparable to the second. |
 
 These come from `npm run drill -- --symbol AAPLc --bps 350` (also saved in `.data/drills.jsonl`). The DEX price in a drill is synthetic and labelled as such.
+
+## Measured latency: 5-round drill series (Nov 27 UTC)
+
+Five full loops back to back on AAPLc (synthetic −3.50%, 60 s apart). Every round starts from a healthy asset, and after
+the breaker trips it is restored with a real-price report and cleared, so no round inherits the state of the one before.
+All rounds are labelled **DRILL** on-chain and in the app.
+
+| # | Origin `reportMarket` (Base Sepolia) | `react()` (Lasna) | `triggerCircuitBreaker` (Base Sepolia) | Chain time | Blocks | Stopwatch |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | [`0x580b69c1…c475`](https://sepolia.basescan.org/tx/0x580b69c14a9fdd189cd014d0c29035c0d85cc3d99d285bebfa74677d63a5c475) | [`0x3f2dc760…b9b6`](https://lasna.reactscan.net/tx/0x3f2dc760753162f722f5b7a01f10efd9212e4a2e84aaeb1bfbc5a8e1604eb9b6) | [`0xa9dde251…ad79`](https://sepolia.basescan.org/tx/0xa9dde2517361812631d25901f01d224b81ec397395d619e049a6076f887aad79) | 2 s | 9 | 1.3 s |
+| 2 | [`0xf8a712b2…3ab0`](https://sepolia.basescan.org/tx/0xf8a712b24972006846cb4b75f20874039793316ddb7d5bcb5ca6ff4c4ea93ab0) | [`0x4276b2f5…ff56`](https://lasna.reactscan.net/tx/0x4276b2f564d82a2907f67aa8f3778243727835c41bcbe3e2d9d7350260ecff56) | [`0xfc958b21…a648`](https://sepolia.basescan.org/tx/0xfc958b21fd6133ca7937174a994944a84eceaad6c64754157088c1be3fbda648) | 1 s | 5 | 1.3 s |
+| 3 | [`0x31ed63a5…b01c`](https://sepolia.basescan.org/tx/0x31ed63a5f03b7214a70353dc823e0eaa98b3463a5debd8134b54c865a3dbb01c) | [`0x3eaad27d…9ceb`](https://lasna.reactscan.net/tx/0x3eaad27d80be59ea3a376eae59f9ca9e2c02bc6b216491ba7a91961079729ceb) | [`0xfd579d0a…fee0`](https://sepolia.basescan.org/tx/0xfd579d0ae929a5834a9caa51a853de6eede613111c718b233997128b68fcfee0) | 2 s | 8 | 2.5 s |
+| 4 | [`0x37c640f9…10b1`](https://sepolia.basescan.org/tx/0x37c640f92b64520de6d7b6da8f31b2994cf09500a9c12a6f60b8a7b0b86110b1) | [`0xfa786cd9…fb8e`](https://lasna.reactscan.net/tx/0xfa786cd9579bbfe4d033660016f63dc6d3c979be62a27d8d149b6c2cdd43fb8e) | [`0x7c789c1d…49a7`](https://sepolia.basescan.org/tx/0x7c789c1de29712a46189a0cca2b8c9f57b5f2f644aa304110f20a142164149a7) | 2 s | 8 | 2.5 s |
+| 5 | [`0xa19a05f4…7f5c`](https://sepolia.basescan.org/tx/0xa19a05f48fbd4e9c6965769b3711f1c505fd9125dc54ab59d7510b4001dc7f5c) | [`0x13ada450…4e25`](https://lasna.reactscan.net/tx/0x13ada45006f6daa64070055d488cbf2bcfcc62a65a4b3dce8ea122dba6554e25) | [`0x3e8fe9e6…517d`](https://sepolia.basescan.org/tx/0x3e8fe9e68f991913801bc237beea536ceb511e397fc8ae0fc84b7fafb84f517d) | 1 s | 6 | 1.3 s |
+
+| Origin report → breaker | Median | Min | Max |
+| --- | --- | --- | --- |
+| Chain time (Base Sepolia block timestamps, 1 s resolution) | **2 s** | 1 s | 2 s |
+| Blocks | 8 | 5 | 9 |
+| Stopwatch (our worker, see note) | 1.3 s | 1.3 s | 2.5 s |
+
+**5 of 5 rounds completed; every callback landed within 2 s of chain time.** Across all 6 recorded drills (this series plus the single drill
+above) the median is 1.5 s and the maximum 2 s of chain time.
+
+How to read the two figures:
+- *Chain time* is the gap between the origin block and the callback block on the same chain, so it is the number to quote.
+- *Stopwatch* starts when our worker receives the origin receipt (the origin is already mined) and polls the breaker
+  flag a little over once a second, so it can read shorter than chain time and is only accurate to about one poll. The real
+  market events below were timed from *sending* the report, which adds the origin's own inclusion time; that is why
+  they read about 4 s.
+- The Lasna hop is shown by transaction only: two chains' clocks are not comparable to the second.
+
+Reproduce: `cd apps/worker && npx tsx --env-file-if-exists=../../.env src/latency-drill.ts --symbol AAPLc --bps 350 --rounds 5 --gap 60`
+(prints this table and saves it to `.data/latency-stats.md`; each round is appended to `.data/drills.jsonl`).
 
 ## Full loop on a real market event (live data, testnet breaker)
 
@@ -114,6 +151,7 @@ Reproduce: `cd apps/worker && npx tsx --env-file-if-exists=../../.env src/vault-
 
 - Deploy all three contracts from scratch: [`docs/DEPLOY.md`](DEPLOY.md) (burner wallet, faucets, `forge create` for the registry and the sentinel, `npm run onchain:setup`, about 30 minutes).
 - Run the full loop yourself: `npm run drill -- --symbol AAPLc --bps 350 --clear` prints the origin, Lasna and destination transactions and the measured latency.
+- Measure it over several rounds: `cd apps/worker && npx tsx --env-file-if-exists=../../.env src/latency-drill.ts --symbol AAPLc --bps 350 --rounds 5` (restores and clears between rounds, prints median/min/max).
 - Watch the breaker stop a deposit: `cd apps/worker && npx tsx --env-file-if-exists=../../.env src/vault-drill.ts --vault <GuardedVault> --symbol AAPLc --bps 350`.
 
 ## Tests
