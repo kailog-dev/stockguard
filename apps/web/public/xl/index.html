@@ -158,6 +158,7 @@
     else if (i.GAP) out.push(`${gapStr(r.gapBps)} off reference`);
     if (i.STALE) out.push('no independent price to check against');
     if (i.CLOSED) out.push('US market closed');
+    if (!i.THIN && r.impactPct1k != null) out.push(`$1,000 buy costs ${pct(r.impactPct1k)}`);
     return out.length ? out.join(' · ') : `$1,000 buy costs ${pct(r.impactPct1k)} · ${gapStr(r.gapBps)} vs reference`;
   }
 
@@ -236,14 +237,14 @@
     const byT = {};
     rows.forEach((r) => (byT[r.ticker] ||= []).push(r));
     const pairs = Object.entries(byT).map(([t, rs]) => {
-      const ok = rs.filter((r) => r.verdict === 'ROUTE_OK').sort((a, b) => a.impactPct1k - b.impactPct1k)[0];
+      const ok = rs.filter((r) => r.verdict !== 'DO_NOT_ROUTE').sort((a, b) => (a.verdict === 'ROUTE_OK' ? 0 : 1) - (b.verdict === 'ROUTE_OK' ? 0 : 1) || a.impactPct1k - b.impactPct1k)[0];
       const bad = rs.filter((r) => r.verdict === 'DO_NOT_ROUTE' && !r.inputs.UNTRUSTED).sort((a, b) => (b.impactPct1k ?? 1e12) - (a.impactPct1k ?? 1e12))[0];
       return ok && bad ? { t, ok, bad } : null;
     }).filter(Boolean).sort((a, b) => (b.bad.impactPct1k ?? 1e12) - (a.bad.impactPct1k ?? 1e12)).slice(0, 6);
     const leg = (r) => `<div class="leg" data-id="${esc(r.poolId)}"><span class="badge ${BADGE[r.verdict]}">${LABEL[r.verdict]}</span><span class="pair">${esc(r.pair)}</span><span class="cost">${pct(r.impactPct1k)}</span><span class="why">${esc(reasons(r))}</span></div>`;
     $('pairs').innerHTML = pairs.length
       ? pairs.map((p) => `<div class="card"><h3>${esc(p.t)}</h3>${leg(p.ok)}${leg(p.bad)}</div>`).join('')
-      : '<div class="card">No ticker has both a healthy and a blocked pool right now.</div>';
+      : '<div class="card">No ticker has both a usable and a blocked pool right now.</div>';
 
     if (!selected || !rows.some((r) => r.poolId === selected)) selected = pairs[0]?.bad.poolId ?? rows[0]?.poolId ?? null;
     renderTable();
