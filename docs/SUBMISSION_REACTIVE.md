@@ -110,6 +110,12 @@ GuardedVault only keeps a ledger, no tokens move.
 Reproduce: `cd apps/worker && npx tsx --env-file-if-exists=../../.env src/vault-drill.ts --vault 0xe7F8abb356debAD44462fcf1e0B597C4CFFfDA06 --symbol AAPLc --bps 350`
 (results in `.data/vault-drills.jsonl`).
 
+## Reproduce it
+
+- Deploy all three contracts from scratch: [`docs/DEPLOY.md`](DEPLOY.md) (burner wallet, faucets, `forge create` for the registry and the sentinel, `npm run onchain:setup`, about 30 minutes).
+- Run the full loop yourself: `npm run drill -- --symbol AAPLc --bps 350 --clear` prints the origin, Lasna and destination transactions and the measured latency.
+- Watch the breaker stop a deposit: `cd apps/worker && npx tsx --env-file-if-exists=../../.env src/vault-drill.ts --vault <GuardedVault> --symbol AAPLc --bps 350`.
+
 ## Tests
 
 `cd contracts && forge test` — 38 tests, including an end-to-end test of report → react → callback → breaker, foreign-RSC

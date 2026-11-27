@@ -47,6 +47,64 @@ ROUTE_OK     = neither
 
 The rule is small, fixed and easy to audit, which suits a circuit well. Once taped out, anyone can run `eval` on X Layer with a pool's six signals and get the same verdict StockGuard publishes. The rule cannot be quietly changed afterwards, because the netlist hash is public. Routers, vaults and agents can depend on it without trusting StockGuard's server for the decision itself.
 
+## Who it is for
+
+| User | The decision they make | What StockGuard XL gives them |
+|---|---|---|
+| Wallets with a built-in swap (OKX Wallet and others on X Layer) | Which pool to quote for a user who taps "buy TSLA" | A warning or a block before a user is sent into a pool that would eat the order |
+| DEX aggregators and routers on X Layer | Which pools to include in a route | A list of pools to skip, refreshed every minute, readable on-chain |
+| AI trading agents | Whether to trade now, and where | A pre-trade check an agent can call by itself, paid per call |
+| Tokenized-stock issuers and market makers (xStocks and wrappers) | Where their token trades badly | A market-quality view of every pool that lists their token |
+| Lending and vault protocols that accept tokenized stocks | Whether a pool price is safe to read | The same verdict as a guard on deposits, like the GuardedVault example on Base |
+
+## Why they pay, and why they keep using it
+
+- **One bad route costs more than the service.** A $1,000 buy in the wrong TSLA pool on X Layer would have cost 36,096 % over mid (Nov 27); the right pool cost 0.07 %. A wallet that routes a user into the wrong pool loses the user.
+- **The answer changes every minute.** Pools open, drain and break, and the US market opens and closes. A one-time list goes stale in hours, so the value is the live feed, not a report.
+- **It is cheaper than building it.** Doing this in-house means finding real pools, pinning stablecoins, measuring depth with quotes, sourcing independent prices across chains and handling the NYSE calendar for every listed stock.
+
+## Revenue model
+
+| Tier | Who | Price (planned) | What they get |
+|---|---|---|---|
+| Public | Everyone | Free | The verdict page, the JSON feed with a delay, on-chain verdicts for listed pools |
+| Per call (x402) | AI agents, small apps | $0.001 per check, paid in stablecoin | Live verdict for one pool, no account, no API key |
+| Integration | Wallets, aggregators, routers | Monthly subscription | Live feed, webhooks when a verdict flips, history, uptime commitment |
+| Issuer report | Tokenized-stock issuers, market makers | Monthly subscription | Pool-quality report for their tokens across chains |
+
+The public tier stays free on purpose: it is how wallets and agents find the product and how the verdicts earn trust.
+
+## How we reach users
+
+1. **OKX ecosystem first.** X Layer is where xStocks trade on OKX's chain; the first integration targets are the X Layer DEX aggregators and the wallet teams, introduced through the X Layer builder program and Demo Day.
+2. **Agent marketplaces.** List the x402 endpoint where agents discover paid tools, and ship a ready-made agent tool (MCP) that calls it.
+3. **Open source as distribution.** The circuit, the verdict contract and the SDK are MIT-licensed; any router can read verdicts on-chain without talking to us.
+4. **Public data people share.** Weekly "same stock, different pool" posts on X with the live numbers.
+
+## TapeOut and X Layer integration
+
+| Part | How StockGuard XL uses it | Status |
+|---|---|---|
+| TapeOut circuit | The routing rule itself: 16 NAND gates, 6 inputs, 2 outputs, TAP-02 | Taped out Dec 5 (`<circuit id>`) |
+| `eval` on X Layer | Every verdict can be recomputed on-chain from the six published signals | `<4 eval checks>` |
+| RouteGuard contract (X Layer) | StockGuard posts each pool's six signals; the contract runs them through the circuit and stores the verdict. Routers read `verdictOf(pool)`. Our server supplies facts, the circuit makes the decision | Planned Dec 5 |
+| Uniswap v3 factory and QuoterV2 on X Layer | Pool authenticity (`getPool`) and real $1,000 quotes | Live |
+| TapeSend / DeWEB | Verdict-flip notices to subscribers' containers; a tamper-proof copy of the verdict page | Evaluated Dec 6; listed here only if shipped |
+
+## Built during the event
+
+StockGuard started on Base. Everything for X Layer is new and built for TapeOut Accelerate (Nov 26 onward): pool discovery on Uniswap v3 and v4, factory verification, QuoterV2 depth, cross-chain and stock-for-stock pricing, the 16-gate circuit and its tests, the verdict API, the live circuit page, the RouteGuard contract and the tape-out.
+
+## Demo video (under 3 minutes)
+
+1. 0:00 Problem — same TSLA, two pools: 0.07 % vs 36,096 %.
+2. 0:25 Who loses — wallets, routers and agents that pick a pool by name.
+3. 0:40 The page — live verdicts, the "same stock, different pool" cards.
+4. 1:10 The circuit — click a pool, watch the signals light the gates; netlist hash on screen.
+5. 1:40 On X Layer — tape-out transaction, `eval` result, RouteGuard storing a verdict.
+6. 2:15 Users and money — free page, $0.001 per agent check, subscriptions for wallets and issuers.
+7. 2:40 Close — read-only, open source, live now.
+
 ## Live
 
 - Verdict page with the live circuit: https://stockguard.dev/xl/ (click any pool to send its signals through the gates)
